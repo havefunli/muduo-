@@ -1,33 +1,22 @@
-#include "TimerWheel.hpp" 
+#include "Socket.hpp"
 
-class Test
-{
-public:
-    Test()
-    {
-        std::cout << "Test()" << std::endl;
-    }
-
-    void Del()
-    {
-        std::cout << "Del()" << std::endl;
-    }
-
-    ~Test()
-    {
-        std::cout << "~Test()" << std::endl;
-    }
-};
 
 int main()
 {
-    Test t1;
-    TimerWheel wheel(10);
+    std::unique_ptr<Socket> ListenPtr = std::make_unique<TcpSocket>();
+    ListenPtr ->BuildTcpListen(8888);
 
-    wheel.TimerAdd(1, 3, std::bind(&Test::Del, &t1));
-    for (int i = 0; i < 2; i++)
+    SocketAddress client;
+    int code = 0;
+    int fd = ListenPtr->AcceptConnect(client, code);
+
+    std::unique_ptr<Socket> ClientPtr = std::make_unique<TcpSocket>(fd);
+    while (true)
     {
-        wheel.Loop();
+        std::string buffer;
+        ClientPtr->Recv(buffer);
+        std::cout << buffer;
+        sleep(2);
     }
 
     return 0;
