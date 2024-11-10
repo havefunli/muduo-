@@ -143,7 +143,6 @@ TimerWheel::TimerWheel(uint32_t TimeLimit)
 {
     // 开启监控，以及回调方法
     _channel->RigisterEventsFunc(std::bind(&TimerWheel::OnTime, this), nullptr, nullptr);
-    _channel->EnableReadable(true);
     spdlog::info("Successful init timerwheel...");
 }
 
@@ -165,6 +164,9 @@ void TimerWheel::OnTime()
 void TimerWheel::SetEventLoop(EveLoopPtr loop)
 {
     _loop = loop;
+    // 开启对 timerfd 的监控, 在这里踩了雷
+    _channel->SetEventLoop(loop);
+    _channel->EnableReadable(true);
 }
 
 void TimerWheel::RemoveTimer(uint32_t id)
