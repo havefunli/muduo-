@@ -46,6 +46,8 @@ public:
 
     void RefreshTimer(uint32_t id);
 
+    bool HasTimer(uint32_t id);
+
     void EnableTimer(uint32_t id, bool isvalid);
 
 private:

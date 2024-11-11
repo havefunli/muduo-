@@ -21,7 +21,7 @@ int EventLoop::CreateEventFd()
     int efd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     if (efd < 0)
     {
-        perror("ecentfd");
+        perror("eventfd");
         exit(-1);
     }
 
@@ -120,6 +120,7 @@ void EventLoop::UpdateEvent(Channel* channel)
 void EventLoop::ReMoveEvent(Channel* channel)
 {
     _epoll->DelEvent(channel);
+    spdlog::debug("Epoll rm fd = {}", channel->GetFd());
 }
 
 void EventLoop::AddTimer(uint32_t id, uint32_t timeout, TaskFunc task)
@@ -132,8 +133,14 @@ void EventLoop::RefreshTimer(uint32_t id)
     _timer_wheel->RefreshTimer(id);
 }
 
+bool EventLoop::HasTimer(uint32_t id)
+{
+    return _timer_wheel->IsExists(id).first;
+}
+
 void EventLoop::EnableTimer(uint32_t id, bool isvalid)
 {
     _timer_wheel->EnableTimer(id, isvalid);
 }
+
 
