@@ -8,8 +8,8 @@ EventLoop::EventLoop()
     , _channel(std::make_shared<Channel>(_event_fd))
     , _timer_wheel(std::make_shared<TimerWheel>())
 {
-    _timer_wheel->SetEventLoop(shared_from_this());
-    _channel->SetEventLoop(shared_from_this());
+    _timer_wheel->SetEventLoop(this);
+    _channel->SetEventLoop(this);
     _channel->RigisterEventsFunc(std::bind(&EventLoop::ReadEventFd, this), nullptr, nullptr);
     _channel->EnableReadable(true);
     
@@ -25,7 +25,6 @@ int EventLoop::CreateEventFd()
         exit(-1);
     }
 
-    spdlog::info("Successfully created eventfd...");
     return efd;
 }
 

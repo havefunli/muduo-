@@ -15,7 +15,7 @@ using TaskVec    = std::vector<TaskFunc>;
 using EveLoopPtr = std::shared_ptr<EventLoop>;
 using WheelPtr   = std::shared_ptr<TimerWheel>;
 
-class EventLoop
+class EventLoop : public std::enable_shared_from_this<EventLoop>
 {
 private:
     int CreateEventFd();
