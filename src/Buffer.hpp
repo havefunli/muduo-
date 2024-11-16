@@ -9,9 +9,14 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <memory>
 
-#define DEFAULT_BUFFER_SIZE 10
+#define DEFAULT_BUFFER_SIZE 512
+
+class Buffer;
+
 using CharArray = std::vector<char>;
+using BufferPtr = std::shared_ptr<Buffer>;
 
 class Buffer
 {
@@ -68,9 +73,16 @@ public:
 
     void Write(const char* buf, uint32_t len)
     {
+        if (len == 0) return;
+        
         EnsureWritableBytes(len);
         std::copy(buf, buf + len, _buffer.begin() + _write_index);
         _write_index += len;
+    }
+
+    void Write(const std::string buf)
+    {
+        Write(buf.c_str(), buf.size());
     }
 
     void Read(char* buf, uint32_t len)
@@ -82,7 +94,7 @@ public:
         _read_index += len;
     }
 
-    std::string ToString()
+    std::string ReadAllContent()
     {
         if (!ReadableBytes()) return "";
 
@@ -101,8 +113,6 @@ public:
     {
         return _write_index == 0;
     }
-
-
 
 private:
     CharArray _buffer;      // 缓冲区
