@@ -3,18 +3,24 @@
 Connection::Connection(int conn_id, int sockfd, EveLoopPtr loop)
     : _conn_id(conn_id)
     , _sockfd(sockfd)
-    , _istmract(false)
     , _status(CONNECTING)
+    , _socket(std::make_shared<TcpSocket>(sockfd))
+    , _channel(std::make_shared<Channel>(sockfd))
     , _loop(loop)
     , _inbuf(std::make_shared<Buffer>())
     , _outbuf(std::make_shared<Buffer>())
+    , _istmract(false)
 {
     _channel->SetEventLoop(loop.get());
+
+    // 设置对应的回调函数
     _channel->RigisterEventsFunc(std::bind(&Connection::HandleRead, this),
                                  std::bind(&Connection::HandleWrite, this),
                                  std::bind(&Connection::HandleError, this));
     _channel->SetCloseFunc(std::bind(&Connection::HandleClose, this));
     _channel->SetEventCallBack(std::bind(&Connection::HandleEvent, this));
+    
+    spdlog::info("Successful init Connection...");
 }
 
 Connection::~Connection() = default;
@@ -36,13 +42,12 @@ ConStatus Connection::GetStatus()
 
 void Connection::HandleRead()
 {
-    // 读取处理
+    // 读取处理, 在这里等于 0 不再是断开连接
     std::string buf;
     int n = _socket->Recv(buf);
     if (n < 0) { return ShutDownInLoop(); } // 读取出错
-    // 在这里等于 0 不再是断开连接
+
     _inbuf->Write(buf.c_str(), buf.size()); // 写入缓冲区
-    
     // 数据处理
     if (_inbuf->ReadableBytes())
     {
