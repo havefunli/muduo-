@@ -7,9 +7,8 @@ TimerTask::TimerTask(uint32_t id, uint32_t timeout, TaskFunc func)
 
 TimerTask::~TimerTask()
 {
-    if (!_isvalid) return;
-    _task_cb();
     _release_cb();
+    if (_isvalid ) { _task_cb(); }
 }
 
 uint32_t TimerTask::TaskId()
@@ -20,6 +19,11 @@ uint32_t TimerTask::TaskId()
 uint32_t TimerTask::TimeDelay()
 {
     return _timeout;
+}
+
+bool TimerTask::IsValid()
+{
+    return _isvalid;
 }
 
 TaskFunc TimerTask::Func()
@@ -65,8 +69,6 @@ int TimerWheel::CreateTimerFd()
     itime.it_interval.tv_sec = 1;
     itime.it_interval.tv_nsec = 0;
     ::timerfd_settime(timerfd, 0, &itime, nullptr);
-
-    spdlog::debug("Successfully created timerfd...");
 
     return timerfd;
 }
@@ -116,7 +118,9 @@ bool TimerWheel::RefreshTimerInLoop(uint32_t id)
 
     PtrTask sp = pair.second.lock();
     // TimerAdd(sp->TaskId(), sp->TimeDelay(), sp->Func());  // 在这里踩了坑，不可以代码复用
-    int timeout = sp->TimeDelay();                           // 我们需要智能指针指向同一个对象，但是调用 add 会在生成一个新的
+    // 若定时器无效则直接退出                                 // 我们需要智能指针指向同一个对象，但是调用 add 会在生成一个新的
+    if (!sp->IsValid()) { return true; }
+    int timeout = sp->TimeDelay();                           
     int pos = GetNextLocation(timeout);
     _wheel[pos].push_back(sp);
 
@@ -161,7 +165,7 @@ void TimerWheel::OnTime()
     ReadTimerFd();
 }
 
-void TimerWheel::SetEventLoop(EveLoopPtr loop)
+void TimerWheel::SetEventLoop(EventLoop* loop)
 {
     _loop = loop;
     // 开启对 timerfd 的监控, 在这里踩了雷
