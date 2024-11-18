@@ -14,6 +14,12 @@ public:
 
     ~Acceptor();
 
+    // 这个用于开启事件监控
+    // 不能直接在构造函数开启
+    // 是因为如果新连接来了，但是并未设置连接回调函数
+    // 就不能正常处理连接，所以必须在设置回调函数之后再打开监听
+    void Listen();
+
     void SetAcceptCallBack(const AcceptCallBack&);
 
 private:

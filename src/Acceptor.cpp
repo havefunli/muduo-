@@ -8,6 +8,7 @@ Acceptor::Acceptor(uint16_t port, EveLoopPtr loop)
     _socket->BuildTcpListen(port);
     _channel->SetFd(_socket->GetFd());
     _channel->SetEventLoop(_loop.get());
+    _channel->RigisterEventsFunc(std::bind(&Acceptor::HandleRead, this), nullptr, nullptr);
 }
 
 Acceptor::~Acceptor() = default;
@@ -15,6 +16,11 @@ Acceptor::~Acceptor() = default;
 void Acceptor::SetAcceptCallBack(const AcceptCallBack& cb)
 {
     _accept_cb = cb;
+}
+
+void Acceptor::Listen()
+{
+    _channel->EnableReadable(true);
 }
 
 void Acceptor::HandleRead()
