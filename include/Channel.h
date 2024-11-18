@@ -19,17 +19,24 @@ using EveLoopPtr = std::shared_ptr<EventLoop>;
 class Channel
 {
 public:
+    
+    // 无参数的构造, 但是后续一定要设置 FD ！！！
+    Channel();
+
     // 构造函数，传入文件描述符
     explicit Channel(int fd);
 
     // 设置 EventLoop 管理器
-    void SetEventLoop(EveLoopPtr loop);
+    void SetEventLoop(EventLoop* loop);
 
     // 设置触发的事件
     void SetRevents(uint32_t revents);
 
     // 获取文件描述符
     int GetFd();
+
+    // 设置文件描述符
+    void SetFd(int);
 
     // 获取关注的事件
     uint32_t GetEvents();
@@ -65,7 +72,7 @@ private:
     int        _fd;          // 关心的连接
     uint32_t   _events;      // 关注的事件
     uint32_t   _revents;     // 实际触发的事件
-    EveLoopPtr _loop;        // EventLoop管理器
+    EventLoop* _loop;        // EventLoop管理器
 
     EventFunc _read_cb;      // 读事件回调函数
     EventFunc _write_cb;     // 写事件回调函数

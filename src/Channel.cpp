@@ -1,13 +1,15 @@
 #include "../include/Channel.h"
 #include "../include/EventLoop.h"
 
+Channel::Channel()
+    : _events(0), _revents(0), _loop(nullptr)
+{}
+
 Channel::Channel(int fd)
     : _fd(fd), _events(0), _revents(0), _loop(nullptr)
-{
-    spdlog::info("Successfully created channel...");
-}
+{}
 
-void Channel::SetEventLoop(EveLoopPtr loop)
+void Channel::SetEventLoop(EventLoop* loop)
 {
     _loop = loop;
 }
@@ -20,6 +22,11 @@ void Channel::SetRevents(uint32_t revents)
 int Channel::GetFd()
 {
     return _fd;
+}
+
+void Channel::SetFd(int fd)
+{
+    _fd = fd;
 }
 
 uint32_t Channel::GetEvents()
@@ -82,21 +89,19 @@ void Channel::HandleEvent()
     {
         if (_read_cb) _read_cb();
     }
-
+    
     // 写事件
     if (_revents & EPOLLOUT)
     {
         if (_write_cb) _write_cb();
     }
-
     // 异常事件
-    if (_revents & EPOLLERR)
+    else if (_revents & EPOLLERR)
     {
         if (_except_cb) _except_cb();
     }
-
     // 挂断事件
-    if (_revents & EPOLLHUP)
+    else if (_revents & EPOLLHUP)
     {
         if (_close_cb) _close_cb();
     }
