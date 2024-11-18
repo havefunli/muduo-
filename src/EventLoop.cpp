@@ -30,7 +30,7 @@ int EventLoop::CreateEventFd()
 
 void EventLoop::ReadEventFd()
 {
-    int res = 0;
+    uint64_t res = 0;
     int ret = read(_event_fd, &res, sizeof(res));
     if (ret < 0)
     {
@@ -62,7 +62,7 @@ void EventLoop::RunAllTask()
 
 void EventLoop::WakeUpEventFd()
 {
-    int val = 1;
+    uint64_t val = 1;
     int ret = write(_event_fd, &val, sizeof(val));
     if (ret < 0)
     {
@@ -83,8 +83,7 @@ void EventLoop::PushTask(const TaskFunc& cb)
 
 void EventLoop::RunInLoop(const TaskFunc& cb)
 {
-    if (IsInLoop())
-        return cb();
+    if (IsInLoop()) { return cb(); }
     return PushTask(cb);
 }
 
