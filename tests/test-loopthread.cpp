@@ -5,9 +5,10 @@
 
 int id = 1;
 std::unordered_map<int, ConnPtr> connections;
-EveLoopPtr main_loop = std::make_shared<EventLoop>();
-std::vector<LoopThread> threads(2);
-int loop_index = 0; 
+
+EveLoopPtr base_loop = std::make_shared<EventLoop>();
+LoopThreadPool thread_pool(2, base_loop);
+
 
 void Handle_Connected(ConnPtr conn)
 {
@@ -31,8 +32,7 @@ void Handle_Closed(ConnPtr conn)
 
 void Accept(int newfd)
 {
-    ConnPtr conn = std::make_shared<Connection>(id, newfd, threads[loop_index].GetLoop());
-    loop_index = (loop_index + 1) % 2;
+    ConnPtr conn = std::make_shared<Connection>(id, newfd, thread_pool.NextLoop());
 
     conn->SetConnectedCallBack(std::bind(Handle_Connected, std::placeholders::_1));
     conn->SetMessageCallBack(std::bind(Handle_Msg, std::placeholders::_1, std::placeholders::_2));
@@ -48,14 +48,14 @@ void Accept(int newfd)
 int main()
 {
     spdlog::set_level(spdlog::level::debug);
-    Acceptor acceptor(8888, main_loop);
+
+    Acceptor acceptor(8888, base_loop);
     acceptor.SetAcceptCallBack(std::bind(Accept, std::placeholders::_1));
     acceptor.Listen();
 
-    while (1)
-    {
-        main_loop->Start();
-    }
+    thread_pool.InitPool();
+
+    while (1) { base_loop->Start(); }
     
     return 0;
 }
