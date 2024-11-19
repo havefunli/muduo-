@@ -23,6 +23,9 @@ public:
     // 无参数的构造, 但是后续一定要设置 FD ！！！
     Channel();
 
+    /*将回调函数置空，防止连接都析构了，还去调用对应的函数*/
+    ~Channel();
+
     // 构造函数，传入文件描述符
     explicit Channel(int fd);
 

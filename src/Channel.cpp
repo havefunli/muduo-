@@ -5,6 +5,15 @@ Channel::Channel()
     : _events(0), _revents(0), _loop(nullptr)
 {}
 
+Channel::~Channel()
+{
+    _read_cb   = nullptr;
+    _write_cb  = nullptr;
+    _except_cb = nullptr;
+    _close_cb  = nullptr;
+    _event_cb  = nullptr;
+}
+
 Channel::Channel(int fd)
     : _fd(fd), _events(0), _revents(0), _loop(nullptr)
 {}
@@ -107,7 +116,7 @@ void Channel::HandleEvent()
     }
 
     // 任何事件处理之后的回调
-    if (_event_cb) _event_cb();
+    if (_event_cb) { _event_cb(); }
 }
 
 void Channel::ReMove()
