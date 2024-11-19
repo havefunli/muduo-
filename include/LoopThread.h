@@ -5,9 +5,11 @@
 #include <condition_variable>
 
 class LoopThread;
+class LoopThreadPool;
 
 using LoopThreadPtr = std::shared_ptr<LoopThread>;
 using LoopThreads   = std::vector<LoopThreadPtr>;
+using PoolPtr       = std::shared_ptr<LoopThreadPool>;
 
 class LoopThread
 {
