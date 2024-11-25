@@ -2,9 +2,10 @@
 #include "../include/TcpServer.h"
 #include "../src/Util.hpp"
 #include <string>
+#include <sstream>
 #include <unordered_map>
 
-class HttpRequests;
+class HttpRequest;
 
 using HeaderMap = std::unordered_map<std::string, std::string>;
 using ParamsMap = std::unordered_map<std::string, std::string>;
@@ -22,7 +23,7 @@ public:
     HeaderMap   _headers; // 请求头
     ParamsMap   _params;  // 请求参数
 
-    bool HashHeader(const std::string &key)
+    bool HasHeader(const std::string &key)
     {
         auto iter = _headers.find(key);
         return iter != _headers.end();
@@ -53,7 +54,37 @@ public:
         {
             return std::stoi(GetHeader("Content-Length"));
         }
-        return -1;
+        return 0;
+    }
+
+    /*
+    特定数据的获取:
+    静态资源   -> 资源返回
+    特定的功能 -> 功能返回
+    */
+    std::string GetSrc()
+    {
+        auto pos = _path.find_last_of('/');
+        return _path.substr(pos + 1);
+    }
+
+    // 判断长短连接
+    bool Close()
+    {
+        // 没有Connection字段，或者有Connection但是值是close，则都是短链接，否则就是长连接
+        if (HasHeader("Connection") == true && GetHeader("Connection") == "keep-alive") 
+        {
+            return false;
+        }
+        return true;
+    }
+
+    // 清空数据
+    void Clear()
+    {
+        _method = _path = _version = _body = "";
+        _headers.clear();
+        _params.clear();
     }
 };
 
@@ -88,9 +119,10 @@ public:
         return "";
     }
 
-    void SetContent(const std::string& content, std::string& type)
+    void SetContent(const std::string& content, const std::string& type)
     {
         _body = content;
+        SetHeader("Content-Length", std::to_string(content.size()));
         SetHeader("Content-Type", type);
     }
 
@@ -99,14 +131,35 @@ public:
         _status   = status;
         _redirect = true;
         _reurl    = url;
+        SetHeader("Location", url);
     }
 
+    // 创建一个 HTTP 响应报文
+    void InitMsg(std::string& msg)
+    {
+        std::ostringstream responseStream;
+        // 版本 状态码 状态码描述
+        responseStream << "HTTP/1.1 " << _status << " " << Util::getHttpStatusDescription(_status) << DefaultLineSep;
+        // 头部信息
+        for (auto& header : _headers)
+        {
+            responseStream << header.first << DefaultHeaderSep << header.second << DefaultLineSep;
+        }
+        // 空行 + 正文
+        responseStream << DefaultLineSep << _body;
+
+        msg = responseStream.str();
+    }
+
+    // 设置状态码
+    void SetStatus(int status) { _status = status; }
+
 private:
-    int _status;        // 状态码
-    bool _redirect;     // 重定向标志
-    std::string _reurl; // 重定向 url
-    std::string _body;  // 响应正文
-    HeaderMap _headers; // 响应头
+    int          _status;        // 状态码
+    bool         _redirect;      // 重定向标志
+    std::string  _reurl;         // 重定向 url
+    std::string  _body;          // 响应正文
+    HeaderMap    _headers;       // 响应头
 };
 
 enum HttpRecvStatus
@@ -121,21 +174,27 @@ enum HttpRecvStatus
 class HttpContext
 {
 private:
-    void RecvHttpLine()
+    void RecvHttpLine(BufferPtr buffer)
     {
-        int pos = _buffer.find(DefaultLineSep);
-        if (pos == std::string::npos) { return; }
-        ParseHttpLine(_buffer.substr(0, pos));
+        if (_recv_status != LINE) { return; }
         
-        // buffer 去除首行
-        _buffer = _buffer.substr(pos + DefaultLineSep.size());
-        _recv_status = HttpRecvStatus::LINE;
+        std::string line = buffer->PeekLine(); 
+        Util::RemoveNewline(line);
+        if (line == "Line Empty...") 
+        {
+            spdlog::info(""); 
+            return; 
+        }
+        ParseHttpLine(line);
+        buffer->Update(); // 处理好了才能取
+        _recv_status = HttpRecvStatus::HEAD;
+        spdlog::info("Successful parse httpline = {} {} {}...", _request._method , _request._path, _request._version);
     }
 
     // GET /.../index?user=..&passward=.. HTTP/1.1
     void ParseHttpLine(const std::string& line)
     {
-        std::vector<std::string> str(3);
+        std::vector<std::string> str;
         Util::Split(line, " ", str);
         // 获取方式
         if (line.size() > 0) { _request._method = str[0]; }
@@ -156,88 +215,114 @@ private:
             {
                 _request._path = path_params.substr(0, pos);
                 std::string params = path_params.substr(pos + 1);
-                ParamsMap parmap;
-                Util::SplitParams(params, parmap);
-                _request._params = parmap;
+                Util::SplitParams(params, _request._params);
             }
         }
     }
 
     // key: val\r\nkey: val\r\n\r\n...
-    void RecvHttpHeader()
+    void RecvHttpHeader(BufferPtr buffer)
     {
+        if (_recv_status != HEAD) { return; }
+
         while (true)
         {
-            int pos = _buffer.find(DefaultLineSep);
-            if (pos == std::string::npos) { return; } // 等待更多数据
-
-            // 提取一行并更新缓冲区
-            std::string header = _buffer.substr(0, pos);
-            _buffer = _buffer.substr(pos + DefaultLineSep.size());
-
-            // 空行表示头部结束
-            if (header.empty()) { break; }
-
+            std::string header = buffer->ReadLine();
+            // 头部字段不全
+            if (header == "") { return; }
+            // "\r\n" 表示头部结束
+            if (header == "\r\n" || header == "\n") { break; }
+            // 去除换行符
+            Util::RemoveNewline(header);
             ParseHttpHeader(header);
         }
-        _recv_status = HttpRecvStatus::HEAD;
+        _recv_status = HttpRecvStatus::BODY;
+        spdlog::info("Successful parse head...");
     }
 
     void ParseHttpHeader(const std::string& header)
     {
-        // 空行表示头部结束
-        if (header.empty()) { return; }
-
         // 分割键值对
         size_t sep_pos = header.find(DefaultHeaderSep);
-        if (sep_pos == std::string::npos) { return; } 
+        if (sep_pos == std::string::npos) 
+        {
+            _status = 400; 
+            return; 
+        } 
         std::string key = header.substr(0, sep_pos);
         std::string value = header.substr(sep_pos + DefaultHeaderSep.size());
 
         // 插入到请求头中
-        _request._headers.insert(std::make_pair(key, value));
+        if (!key.empty() && !value.empty()) 
+        { 
+            _request._headers.insert(std::make_pair(key, value)); 
+            return;
+        }
+        _status = 400; 
     }
 
-    void RecvHttpBody()
+    void RecvHttpBody(BufferPtr buffer)
     {
+        if (_recv_status != BODY) { return; }
+
         size_t len = _request.GetContentLength();
-        if (len <= 0) 
+        // 正文不存在
+        if (len == 0) 
         {
             _recv_status = HttpRecvStatus::OVER; 
             return; 
         }
 
         // 需要的大小 = 实际大小 - 已经接受大小
+        // 缓冲区的大小已经足够
         int need_size = len - _request._body.size();
-        if (_buffer.size() >= need_size)
+        if (buffer->ReadableBytes() >= need_size)
         {
-            _request._body += _buffer.substr(0, need_size);
-            _buffer.substr(need_size);
-            _recv_status = HttpRecvStatus::BODY;
+            char tmp[DefaultSize];
+            buffer->Read(tmp, need_size);
+            _request._body +=  tmp;
+            _recv_status = HttpRecvStatus::OVER;
             return;
         }
-        
-        _request._body += _buffer;
-        _recv_status = HttpRecvStatus::OVER;
+        // 缓冲区的大小不足够，先取出来
+        _request._body += buffer->ReadAllContent();
+        spdlog::info(" Successful parse body...");
     } 
 
 public:
     HttpContext()
         : _status(200)
         , _recv_status(LINE)
-        , _buffer()
     {}
 
-    void AppendContext(BufferPtr buff) { _buffer += buff->ReadAllContent(); }
+    int RepStatus() { return _status; }
 
-    int ResStatus()
+    int RecvStatus() { return _recv_status; }
+
+    HttpRequest& GetRequest() { return _request; }
+
+    void ParseHttpRequest(BufferPtr buffer)
     {
-         
+        switch (_recv_status)
+        {
+        case HttpRecvStatus::LINE:
+            RecvHttpLine(buffer);
+        case HttpRecvStatus::HEAD:
+            RecvHttpHeader(buffer);
+        case HttpRecvStatus::BODY:
+            RecvHttpBody(buffer);
+        }
     }
 
-private:
-    int             _status;
-    std::string     _buffer;  
+    void Clear()
+    {
+        _status = 200;
+        _recv_status = HttpRecvStatus::LINE;
+        _request.Clear();
+    }
+
+private: 
+    int             _status; 
     HttpRecvStatus  _recv_status;
     HttpRequest     _request;
 };
