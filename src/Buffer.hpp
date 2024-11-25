@@ -99,10 +99,11 @@ public:
     std::string ReadLine()
     {
         auto iter = std::find(_buffer.begin() + _read_index, _buffer.begin() + _write_index, '\n'); // 注意查找的位置
-        if (iter == _buffer.end()) { return ""; }
+        // 这里注意，没有搜索到不再是 npos
+        if (iter == _buffer.begin() + _write_index) { return ""; }
 
-        std::string str(_buffer.begin() + _read_index, iter); // 注意构造的位置
-        _read_index = _fake_index = (iter- _buffer.begin() + 1);
+        std::string str(_buffer.begin() + _read_index, iter + 1); // 注意构造的位置
+        _read_index = _fake_index = (iter - _buffer.begin() + 1);
         return str;
     }
 
@@ -129,10 +130,10 @@ public:
     std::string PeekLine()
     {
         auto iter = std::find(_buffer.begin() + _read_index, _buffer.begin() + _write_index, '\n');
-        if (iter == _buffer.end()) { return ""; }
+        if (iter == _buffer.begin() + _write_index) { return ""; }
 
-        std::string str(_buffer.begin() + _read_index, iter); 
-        _fake_index = (iter- _buffer.begin() + 1);
+        std::string str(_buffer.begin() + _read_index, iter + 1); 
+        _fake_index = (iter - _buffer.begin() + 1);
         return str;
     }
 
