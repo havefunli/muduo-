@@ -4,8 +4,7 @@
 #include "../src/Http.hpp"
 
 using Handler   = std::function<void(const HttpRequest&, HttpResponse&)>;
-using MethodMap = std::unordered_map<std::regex, Handler>;
-const std::string TemplatePath = "../templates/";
+using MethodMap = std::unordered_map<std::string, Handler>;
 
 class HttpServer
 {
@@ -36,19 +35,26 @@ private:
 
 
 public:
-    HttpServer();
+    HttpServer(int, int, std::string base_dir = "");
     
     ~HttpServer();
 
     void SetBaseDir(const std::string&);
 
-    void Get(const std::string&, Handler& handler);
+    // 设置 GET 对应的函数
+    void Get(const std::string&, Handler&);
 
-    void Post(const std::string&, Handler& handler);
+    // 设置 Post 对应的函数
+    void Post(const std::string&, Handler&);
 
-    void Put(const std::string&, Handler& handler);
+    // 设置 Put 对应的函数
+    void Put(const std::string&, Handler&);
 
-    void Del(const std::string&, Handler& handler);
+    // 设置 Del 对应的函数
+    void Del(const std::string&, Handler&);
+
+    // 开始运行
+    void Start();
 
 private:
     MethodMap   _get_route;  // GET 对应的方法

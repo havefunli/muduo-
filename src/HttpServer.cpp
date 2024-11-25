@@ -2,17 +2,37 @@
 
 void HttpServer::DispatchHandle(HttpRequest& req, HttpResponse& rsp, MethodMap handlers)
 {
-    for (auto& handler : handlers)
-    {
-        const std::regex& re = handler.first;
-        Handler func = handler.second;
+    // for (auto& handler : handlers)
+    // {
+    //     const std::string& method_name = handler.first;
+    //     Handler func = handler.second;
+    //     // 判断请求的方法是否存在
+    //     bool ret = (method_name == req.GetSrc());
+    //     // 判断使用哪个函数逻辑
+    //     if (!ret) { continue; }
+    //     return func(req, rsp);
+    // }
 
-        bool ret = std::regex_match(req._path, req._matches, re);
-        if (!ret) { continue; }
-        return func(req, rsp);
-    }
     // 没有合适的方法
-    return rsp.SetStatus(404);
+    if (handlers.find(req.GetSrc()) == handlers.end()) { return rsp.SetStatus(404); }
+    // 执行
+    else { return handlers[req.GetSrc()](req, rsp); }  
+}
+
+bool HttpServer::IsFileHandle(HttpRequest& req)
+{
+    // 1. 是否设置了静态资源路径
+    if (_base_dir.empty()) { return false; }
+    // 2. 请求方法是否是 GET
+    if (req._method != "GET") { return false; }
+    // 3. 请求的资源路径是否合法
+    if (!Util::IsValidPath(req._path)) { return false; }
+    // 4. 对 / 根目录的请求
+    if (req._path.back() == '/') { req._path += "index.html"; }
+    // 5. 加上资源根目录
+    req._path = _base_dir + req._path;
+    
+    return true;
 }
 
 void HttpServer::Route(HttpRequest& req, HttpResponse& rsp)
@@ -29,6 +49,11 @@ void HttpServer::Route(HttpRequest& req, HttpResponse& rsp)
     rsp.SetStatus(404);
 }
 
+void HttpServer::OnConncted(ConnPtr conn) 
+{ 
+    conn->SetContext(HttpContext()); 
+}
+
 void HttpServer::OnMessage(ConnPtr conn, BufferPtr buffer)
 {
     // 避免多个请求只处理一个
@@ -37,14 +62,17 @@ void HttpServer::OnMessage(ConnPtr conn, BufferPtr buffer)
         // 1. 获取上下文
         HttpContext& context = conn->GetContext().Get<HttpContext>();
         // 2. 对现在 buffer 的数据解析到上下文, 并获取 request
+        spdlog::info("Start parsing the request data...");
         context.ParseHttpRequest(buffer);
+        spdlog::info("Parsing data done...");
+
         HttpRequest& req = context.GetRequest();
         
         HttpResponse rsp;
         rsp.SetStatus(context.RepStatus());
         
         // 请求有问题
-        if (context.RepStatus() != 400) 
+        if (context.RepStatus() != 200) 
         {
             ErrorHandle(req, rsp);
             SendResponse(conn, req, rsp);
@@ -64,16 +92,11 @@ void HttpServer::OnMessage(ConnPtr conn, BufferPtr buffer)
     }
 }
 
-void HttpServer::OnConncted(ConnPtr conn) 
-{ 
-    conn->SetContext(HttpContext()); 
-}
-
 void HttpServer::ErrorHandle(HttpRequest& req, HttpResponse& rsp)
 {
 
     std::string out;
-    Util::ReadFile(TemplatePath + "error.html", out);
+    Util::ReadFile(_base_dir + "error.html", out);
     rsp.SetContent(out, "text/html");
 }
 
@@ -83,5 +106,58 @@ void HttpServer::SendResponse(ConnPtr conn, HttpRequest& req, HttpResponse& rsp)
     // 获取响应数据
     rsp.InitMsg(msg);
     // 发送数据
+    spdlog::info("msg = {}", msg);
     conn->Send(msg.c_str(), msg.size());
+}
+
+void HttpServer::FileHandle(HttpRequest& req, HttpResponse& rsp)
+{
+    // 读取指定文件内容
+    std::string content;
+    Util::ReadFile(req._path, content);
+    // 获取文件类型
+    std::string mime_type = Util::GetMimeType(req._path);
+    // 放入响应结构体中
+    rsp.SetContent(content, mime_type);
+}
+
+
+HttpServer::HttpServer(int port, int thread_num, std::string base_dir) 
+    : _server(port, thread_num)
+    , _base_dir(base_dir)
+{
+    // 设置回调函数
+    _server.SetConnectedCallBack(std::bind(&HttpServer::OnConncted, this, std::placeholders::_1));
+    _server.SetMessageCallBack(std::bind(&HttpServer::OnMessage, this, std::placeholders::_1, std::placeholders::_2));
+    // 启动非活跃断开功能
+    _server.EnableMonitorActivity(true);
+}
+
+HttpServer::~HttpServer() = default;
+
+void HttpServer::SetBaseDir(const std::string& dir) { _base_dir = dir; }
+
+void HttpServer::Get(const std::string& pattern, Handler& handle)
+{
+    _get_route.insert(std::make_pair(pattern, handle));
+}
+
+void HttpServer::Post(const std::string& pattern, Handler& handle)
+{
+    _get_route.insert(std::make_pair(pattern, handle));
+}
+
+void HttpServer::Put(const std::string& pattern, Handler& handle)
+{
+    _get_route.insert(std::make_pair(pattern, handle));
+}
+
+void HttpServer::Del(const std::string& pattern, Handler& handle)
+{
+    _get_route.insert(std::make_pair(pattern, handle));
+}
+
+void HttpServer::Start()
+{
+    _server.Start();
 }
