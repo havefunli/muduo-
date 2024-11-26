@@ -10,6 +10,7 @@ class HttpRequest;
 using HeaderMap = std::unordered_map<std::string, std::string>;
 using ParamsMap = std::unordered_map<std::string, std::string>;
 
+const int MaxLineLength            = 8190;
 const std::string DefaultLineSep   = "\r\n";
 const std::string DefaultHeaderSep = ": ";
 
@@ -180,22 +181,29 @@ private:
         
         std::string line = buffer->PeekLine(); 
         Util::RemoveNewline(line);
-        if (line == "Line Empty...") 
-        {
-            spdlog::info(""); 
+        if (line == "") 
+        {   
+            // 没有提取到一行但是数据不为空还很长
+            if (buffer->ReadableBytes() >= MaxLineLength) { _status = 400; }
+            else { spdlog::debug("incomplete data..."); }
             return; 
         }
-        ParseHttpLine(line);
+        if (!ParseHttpLine(line)) { return; };
         buffer->Update(); // 处理好了才能取
         _recv_status = HttpRecvStatus::HEAD;
-        spdlog::info("Successful parse httpline = {} {} {}...", _request._method , _request._path, _request._version);
+        spdlog::debug("Successful parse httpline...");
     }
 
     // GET /.../index?user=..&passward=.. HTTP/1.1
-    void ParseHttpLine(const std::string& line)
+    bool ParseHttpLine(const std::string& line)
     {
         std::vector<std::string> str;
         Util::Split(line, " ", str);
+        if (str.size() != 3) 
+        {
+            _status = 400; 
+            return false; 
+        }
         // 获取方式
         if (line.size() > 0) { _request._method = str[0]; }
         // 获取版本
@@ -209,7 +217,7 @@ private:
             if (pos == std::string::npos) 
             {
                 _request._path = path_params;
-                return;
+                return true;
             }
             else
             {
@@ -218,6 +226,8 @@ private:
                 Util::SplitParams(params, _request._params);
             }
         }
+
+        return true;
     }
 
     // key: val\r\nkey: val\r\n\r\n...
@@ -237,7 +247,7 @@ private:
             ParseHttpHeader(header);
         }
         _recv_status = HttpRecvStatus::BODY;
-        spdlog::info("Successful parse head...");
+        spdlog::debug("Successful parse head...");
     }
 
     void ParseHttpHeader(const std::string& header)
@@ -286,7 +296,7 @@ private:
         }
         // 缓冲区的大小不足够，先取出来
         _request._body += buffer->ReadAllContent();
-        spdlog::info(" Successful parse body...");
+        spdlog::debug(" Successful parse body...");
     } 
 
 public:
