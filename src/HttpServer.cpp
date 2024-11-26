@@ -56,24 +56,34 @@ void HttpServer::OnConncted(ConnPtr conn)
 
 void HttpServer::OnMessage(ConnPtr conn, BufferPtr buffer)
 {
+    // spdlog::debug("Now I am in the OnMsg...");
+    // if (buffer == nullptr) 
+    // {
+    //     std::cout << "OnMessage" << std::endl;
+    //     return; 
+    // }
+
+    
     // 避免多个请求只处理一个
     while (buffer->ReadableBytes())
     {
         // 1. 获取上下文
         HttpContext& context = conn->GetContext().Get<HttpContext>();
         // 2. 对现在 buffer 的数据解析到上下文, 并获取 request
-        spdlog::info("Start parsing the request data...");
+        spdlog::debug("Start parsing the request data...");
         context.ParseHttpRequest(buffer);
-        spdlog::info("Parsing data done...");
+        spdlog::debug("Parsing data done...");
 
         HttpRequest& req = context.GetRequest();
-        
         HttpResponse rsp;
         rsp.SetStatus(context.RepStatus());
-        
         // 请求有问题
         if (context.RepStatus() != 200) 
         {
+            spdlog::info("HTTP format problem, disconnect!");
+            // 需要清除缓冲区数据！
+            // 不然当我们关闭连接时，会先判断有无数据处理，有的话还要处理，如此死循环！
+            buffer->Clear();
             ErrorHandle(req, rsp);
             SendResponse(conn, req, rsp);
             conn->ShutDown();
@@ -86,7 +96,12 @@ void HttpServer::OnMessage(ConnPtr conn, BufferPtr buffer)
         // 4. 组织发送数据
         SendResponse(conn, req, rsp);
         // 5. 是否挂断链接
-        if (req.Close()) { conn->ShutDown(); }
+        if (req.Close()) 
+        {
+             spdlog::info("Ready to hang up...");
+            conn->ShutDown(); 
+             spdlog::info("Done...");
+        }
         // 6. 重置上下文，为下一次数据做准备
         context.Clear();
     }
@@ -106,7 +121,7 @@ void HttpServer::SendResponse(ConnPtr conn, HttpRequest& req, HttpResponse& rsp)
     // 获取响应数据
     rsp.InitMsg(msg);
     // 发送数据
-    spdlog::info("msg = {}", msg);
+    // spdlog::debug("msg = {}", msg);
     conn->Send(msg.c_str(), msg.size());
 }
 
@@ -133,7 +148,10 @@ HttpServer::HttpServer(int port, int thread_num, std::string base_dir)
     _server.EnableMonitorActivity(true);
 }
 
-HttpServer::~HttpServer() = default;
+HttpServer::~HttpServer()
+{
+    spdlog::debug("~HttpServer");
+}
 
 void HttpServer::SetBaseDir(const std::string& dir) { _base_dir = dir; }
 
