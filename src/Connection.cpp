@@ -23,7 +23,14 @@ Connection::Connection(int conn_id, int sockfd, EveLoopPtr loop)
     spdlog::info("Successful init Connection...");
 }
 
-Connection::~Connection() = default;
+Connection::~Connection()
+{
+    _conn_cb       = nullptr;
+    _msg_cb        = nullptr;
+    _closed_cb     = nullptr;
+    _any_cb        = nullptr;
+    _svr_closed_cb = nullptr;
+}
 
 int Connection::GetFd()
 {
@@ -40,19 +47,26 @@ ConStatus Connection::GetStatus()
     return _status;
 }
 
+// TODO
 void Connection::HandleRead()
 {
     // 读取处理, 在这里等于 0 不再是断开连接
     std::string buf;
     int n = _socket->Recv(buf);
+    spdlog::debug("_socket->Recv = {}", n);
     if (n < 0) { return ShutDownInLoop(); } // 读取出错
 
     _inbuf->Write(buf.c_str(), buf.size()); // 写入缓冲区
     // 数据处理
     if (_inbuf->ReadableBytes())
     {
+        spdlog::debug("fd = {}, ready to msg_cb...", this->GetFd());
+        spdlog::debug("this = {}", static_cast<void*>(this));
+        spdlog::debug("_msg_cb = {}", static_cast<void*>(&_msg_cb));
         _msg_cb(shared_from_this(), _inbuf);
     }
+
+    return;
 }
  
 void Connection::HandleWrite()
@@ -67,6 +81,9 @@ void Connection::HandleWrite()
     }
     // 若没有数据处理了，关闭写事件
     if (_outbuf->ReadableBytes() == 0) { _channel->EnableWriteable(false); }
+
+    /*判断什么状态，如果是半关闭状态则直关闭*/
+    if (_status == ConStatus::DISCONNECTING) { ReleaseInLoop(); }
 }
 
 void Connection::HandleClose()
@@ -129,9 +146,10 @@ void Connection::Send(const char* data, size_t n)
     _loop->RunInLoop(std::bind(&Connection::SendInLoop, this, data, n));
 }
 
+// TODO
 void Connection::ShutDownInLoop()
 {
-    _status = DISCONNECTING;
+    _status = DISCONNECTING; // 半关闭状态
     // 还有数据未处理
     if (_inbuf->ReadableBytes())
     {
@@ -139,8 +157,8 @@ void Connection::ShutDownInLoop()
     }
     // 查看还是否存在数据未发送
     if (_outbuf->ReadableBytes()) { _channel->EnableWriteable(true); }
-    // 真正的关闭
-    ReleaseInLoop();
+    // 没有数据发送了
+    else if (_outbuf->ReadableBytes() == 0) { ReleaseInLoop(); }
 }
 
 void Connection::ShutDown()
@@ -204,4 +222,14 @@ void Connection::SetAnyEventCallBack(const AnyEventCallBack& call_back)
 void Connection::SetSrvClosedCallBack(const ClosedCallBack& call_back)
 {
     _svr_closed_cb = call_back;
+}
+
+void Connection::SetContext(const Any& context)
+{
+    _context = context;
+}
+
+Any& Connection::GetContext()
+{
+    return _context;
 }
