@@ -126,11 +126,11 @@ public:
     {
         // struct sockaddr_in client;
         // socklen_t len = sizeof(client);
-
-        socklen_t len = client.AddrSize();
-
+        
         errno = 0;
+        socklen_t len = client.AddrSize();
         int fd = accept(_sockfd, &client, &len);
+        client.ToHost(); // 初始化一下信息
         code = errno;
 
         if(fd < 0) 
@@ -175,20 +175,28 @@ public:
             spdlog::info("Successful recv msg...");
             return n;
         }
-        else if(n < 0)
+        else if(n <= 0)
         {
+            // 断开或者是被打断
+            if (errno == EAGAIN || errno == EINTR) { return 0; }
+            
+            // 真的出错了
             perror("recv");
-            return n;
+            return -1;
         }
-        else
-        {
-            return n;
-        }
+        return -1;
     }
 
     ssize_t Send(const std::string& in) override
     {
         int n = send(_sockfd, in.c_str(), in.size(), 0);
+        if (n < 0)
+        {
+            if (errno == EAGAIN || errno == EINTR) { return 0; }
+            perror("send");
+            return -1;
+        }
+        
         spdlog::info("Successful send msg...");
         return n;
     }
