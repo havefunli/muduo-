@@ -20,7 +20,7 @@ Connection::Connection(int conn_id, int sockfd, EveLoopPtr loop)
     _channel->SetCloseFunc(std::bind(&Connection::HandleClose, this));
     _channel->SetEventCallBack(std::bind(&Connection::HandleEvent, this));
     
-    spdlog::info("Successful init Connection...");
+    spdlog::debug("Successful init Connection...");
 }
 
 Connection::~Connection()
@@ -47,22 +47,46 @@ ConStatus Connection::GetStatus()
     return _status;
 }
 
-// TODO
+/*修改一下逻辑这里Recv的返回逻辑：
+    n > 0 : 有效数据，读取后继续读取;
+    n == 0: 数据读取完毕，return;
+    n < 0 : 读取出错 or 对端关闭，关闭连接 
+*/
 void Connection::HandleRead()
 {
-    // 读取处理, 在这里等于 0 不再是断开连接
-    std::string buf;
-    int n = _socket->Recv(buf);
-    spdlog::debug("_socket->Recv = {}", n);
-    if (n < 0) { return ShutDownInLoop(); } // 读取出错
+    // // 读取处理, 在这里等于 0 不再是断开连接
+    // std::string buf;
+    // int n = _socket->Recv(buf);
+    // spdlog::debug("_socket->Recv = {}", n);
+    // if (n < 0) { return ShutDownInLoop(); } // 读取出错
 
-    _inbuf->Write(buf.c_str(), buf.size()); // 写入缓冲区
+    // _inbuf->Write(buf.c_str(), buf.size()); // 写入缓冲区
+    // // 数据处理
+    // if (_inbuf->ReadableBytes())
+    // {
+    //     _msg_cb(shared_from_this(), _inbuf);
+    // }
+
+    while (true)
+    {
+        // 读取处理, 在这里等于 0 不再是断开连接
+        std::string buf;
+        int n = _socket->Recv(buf);
+        spdlog::debug("_socket->Recv = {}", n);
+
+        /*数据处理逻辑*/
+        if (n > 0)
+        {
+            _inbuf->Write(buf.c_str(), buf.size());
+            continue;
+        }
+        else if (n == 0) { break; }
+        else { return ShutDownInLoop(); }
+    }
+
     // 数据处理
     if (_inbuf->ReadableBytes())
     {
-        spdlog::debug("fd = {}, ready to msg_cb...", this->GetFd());
-        spdlog::debug("this = {}", static_cast<void*>(this));
-        spdlog::debug("_msg_cb = {}", static_cast<void*>(&_msg_cb));
         _msg_cb(shared_from_this(), _inbuf);
     }
 
@@ -82,7 +106,7 @@ void Connection::HandleWrite()
     // 若没有数据处理了，关闭写事件
     if (_outbuf->ReadableBytes() == 0) { _channel->EnableWriteable(false); }
 
-    /*判断什么状态，如果是半关闭状态则直关闭*/
+    /*判断什么状态，如果是半关闭状态则直接关闭*/
     if (_status == ConStatus::DISCONNECTING) { ReleaseInLoop(); }
 }
 
@@ -106,6 +130,7 @@ void Connection::HandleEvent()
 
 void Connection::ReleaseInLoop()
 {
+    spdlog::info("ID = {} is disconnected...", _conn_id);
     _status = DISCONNECTED;
     // 移除对事件的监控
     _channel->ReMove();
@@ -146,7 +171,6 @@ void Connection::Send(const char* data, size_t n)
     _loop->RunInLoop(std::bind(&Connection::SendInLoop, this, data, n));
 }
 
-// TODO
 void Connection::ShutDownInLoop()
 {
     _status = DISCONNECTING; // 半关闭状态
