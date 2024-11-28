@@ -250,7 +250,7 @@ public:
 
     void Write(const char* buf, uint32_t len)
     {
-        if (len == 0) return;
+        if (strlen(buf) == 0 || len == 0) return;
 
         EnsureWritableBytes(len);
         std::copy(buf, buf + len, _buffer.begin() + _write_index);
