@@ -77,7 +77,7 @@
 
 &emsp;该模块主要的功能是管理对描述符监控的事件（增删改查），以及设定回调函数（上层设定）便于触发事件后进行处理，详细如下：
 
-![channel](.\images\channel.png)
+![channel](./images/channel.png)
 
 #### 4.2 实现思想
 
@@ -99,7 +99,7 @@
 
 &emsp;该模块的主要功能首先是封装 epoll 相关的函数，然后对外提供增添事件监控，修改事件监控，删除事件监控，返回发生事件的接口，具体如下：
 
-![poller](.\images\Poller.png) 
+![poller](./images/Poller.png) 
 
 #### 5.2 实现思想
 
@@ -112,13 +112,15 @@
 Poller 模块是真正底层进行事件监控的模块。
 
 <hr>
+
 ### 6. EventLoop 模块
+
 
 #### 6.1 模块概述
 
 &emsp;该模块整合了前面完成的 TimeQueue 模块、Poller 模块、Channel 模块，现在我们只需要将描述符封装为 channel 再挂到 EventLoop 上，就可以自动的完成事件监控，事件处理，超时断开，详细如下：
 
-![eventloop](.\images\eventloop.png)
+![eventloop](./images/eventloop.png)
 
 #### 6.2 实现思想
 
@@ -131,11 +133,40 @@ Poller 模块是真正底层进行事件监控的模块。
 
 &emsp;EventLoop 的结构体大致如下：
 
-![eventloop_structure](.\images\eventloop_structure.png)
+![eventloop_structure](./images/eventloop_structure.png)
 
 
 
- 
+ <hr>
+
+### 7. Connection 模块
+
+#### 7.1 模块概述
+
+&emsp;对一个连接进行全方位的管理，对通信连接的所有操作都是提供这个模块完成的：
+![connection](./images/connection.png)
+
+<br>
+
+#### 7.2 实现思想
+
+&emsp;首先是设置对一个套接字的最基本的事件：读 / 写 / 挂断 / 任意，将这些事件预先设定到 Channel 中管理；提供用户的回调函数管理：连接建立 / 数据接收 / 连接关闭 / 任意事件，将这些函数设定到基本函数回调中。
+
+&emsp;对缓冲区的管理，为了更好的管理连接需要发送和接受的数据，分别创建读写缓冲区管理数据。
+
+&emsp;为连接创建一个状态，这非常重要。每个连接有了相应的状态，才可以在执行任务之后选择是否执行相应的操作（比如如果一个连接需要关闭，那么在执行完写事件之后，我们就需要关闭该连接。）
+
+&emsp;这个模块主要负责整合前几个模块的功能，并且引入用户的回调函数，然后为设定相关的状态，前面理解了这个也不难。
+
+<hr>
+
+
+
+
+
+
+
+
 
 
 
