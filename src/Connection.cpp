@@ -112,9 +112,12 @@ void Connection::HandleWrite()
 
 void Connection::HandleClose()
 {
+    _status = DISCONNECTING;
     // 查看是否剩余数据处理
     if (_inbuf->ReadableBytes()) { _msg_cb(shared_from_this(), _inbuf); }
-    ReleaseInLoop(); // 关闭操作
+    else {
+        ReleaseInLoop(); // 关闭操作
+    }
 }
 
 void Connection::HandleError()
@@ -130,6 +133,9 @@ void Connection::HandleEvent()
 
 void Connection::ReleaseInLoop()
 {
+    if (_status == DISCONNECTED) {
+        return;
+    }
     spdlog::info("ID = {} is disconnected...", _conn_id);
     _status = DISCONNECTED;
     // 移除对事件的监控
@@ -148,7 +154,7 @@ void Connection::EstablishedLoop()
 {
     // 设置为连接状态
     _status = CONNECTED;
-    _channel->EnableReadable(true);
+    _channel->EnableReadable(true); // 需要放在设置读回调函数之后
     // 连接事件回调
     if (_conn_cb) { _conn_cb(shared_from_this()); }
 }
@@ -182,7 +188,7 @@ void Connection::ShutDownInLoop()
     // 查看还是否存在数据未发送
     if (_outbuf->ReadableBytes()) { _channel->EnableWriteable(true); }
     // 没有数据发送了
-    else if (_outbuf->ReadableBytes() == 0) { ReleaseInLoop(); }
+    if (_outbuf->ReadableBytes() == 0) { ReleaseInLoop(); }
 }
 
 void Connection::ShutDown()
