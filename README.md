@@ -199,6 +199,34 @@ Poller 模块是真正底层进行事件监控的模块。
 
 这里需要注意，LoopThreadPool 中也包含一个 base_loop 专门管理监听套接字的事件，如果用户设置从属线程的数量为 0，则所有事件的管理交给 base_loop。
 
+<hr>
+
+### 10. TcpServer
+
+#### 10.1 模块概述
+
+&emsp;该模块是对 Acceptor 以及 ThreadPool 的整合，更方便的创建服务器对象，搭建一个服务器：
+
+![tcpserver](./images/tcpserver.png)
+
+
+
+#### 10.2 实现思想
+
+&emsp;内部需要管理的对象如下:
+
+- Acceptor：创建监听套接字接受新的连接、
+- EventLoop：创建 base_loop 管理 Acceptor 的事件（如果从属线程 == 0，负责所有事件的监控）
+- ThreadPool：从属线程，负责监控连接的事件以及分配 EventLoop
+- unordered_mao<int, connection*>：管理 Connection 对象
+
+工作流程如下：
+
+1. 在 TcpServer 中创建一个 Acceptor 对象，以及 EventLoop 对象
+2. 将 Acceptor 挂到 base_loop 上进行事件监控
+3. 将 Acceptor 接收到的新连接创建为 Connection
+4. 设置各类回调函数，将 Connection 挂到从属线程中管理
+
 
 
 
